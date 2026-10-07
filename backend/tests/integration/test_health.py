@@ -5,10 +5,11 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import get_settings
 from app.main import create_app
+from tests.conftest import Databases
 
 
 @pytest.fixture
-async def client(use_database: str) -> AsyncIterator[AsyncClient]:
+async def client(migrated_database: Databases) -> AsyncIterator[AsyncClient]:
     app = create_app()
     transport = ASGITransport(app=app)
     async with (
