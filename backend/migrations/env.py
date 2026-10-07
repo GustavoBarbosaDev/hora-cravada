@@ -18,7 +18,7 @@ def run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    engine = build_engine(get_settings().database_url)
+    engine = build_engine(get_settings().migration_database_url)
     async with engine.connect() as connection:
         await connection.run_sync(run_migrations)
     await engine.dispose()
