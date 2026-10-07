@@ -3,6 +3,8 @@ import asyncio
 from alembic import context
 from sqlalchemy.engine import Connection
 
+import app.auth.models  # noqa: F401
+import app.tenants.models  # noqa: F401
 from app.config import get_settings
 from app.db.base import Base
 from app.db.session import build_engine
@@ -18,7 +20,7 @@ def run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    engine = build_engine(get_settings().database_url)
+    engine = build_engine(get_settings().migration_database_url)
     async with engine.connect() as connection:
         await connection.run_sync(run_migrations)
     await engine.dispose()

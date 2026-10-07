@@ -31,7 +31,9 @@ services:
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment: &backend-env
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://hora:hora@db:5432/hora_cravada
+      DATABASE_URL: postgresql+asyncpg://hora_app:hora_app@db:5432/hora_cravada
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://hora:hora@db:5432/hora_cravada
+      JWT_SECRET: segredo-de-desenvolvimento-local
       TEST_DATABASE_URL: postgresql+asyncpg://hora:hora@db:5432/hora_cravada_test
       REDIS_URL: redis://redis:6379/0
     ports:

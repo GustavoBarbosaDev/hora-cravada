@@ -17,6 +17,9 @@ dependencies = [
     "structlog>=24.4",
     "redis>=5.0",
     "arq>=0.26",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.9",
+    "email-validator>=2.2",
 ]
 
 [project.optional-dependencies]
