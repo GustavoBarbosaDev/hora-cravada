@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,10 +28,11 @@ async def signup(session: AsyncSession, data: SignupRequest) -> tuple[Tenant, Us
         raise ConflictError("Esse endereço já está em uso.", details={"field": "slug"}) from exc
 
     await set_tenant(session, tenant.id)
+    password_hash = await asyncio.to_thread(hash_password, data.owner_password)
     owner = User(
         tenant_id=tenant.id,
         email=data.owner_email,
-        password_hash=hash_password(data.owner_password),
+        password_hash=password_hash,
         role=Role.owner,
     )
     session.add(owner)

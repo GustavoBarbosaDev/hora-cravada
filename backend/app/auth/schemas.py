@@ -1,15 +1,19 @@
 import uuid
+from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.auth.models import Role
 from app.tenants.schemas import Password, Slug
+
+# Os refresh tokens têm cerca de 80 caracteres; o teto só barra corpos absurdos.
+RefreshTokenStr = Annotated[str, Field(min_length=1, max_length=512)]
 
 
 class LoginRequest(BaseModel):
     tenant_slug: Slug
     email: EmailStr
-    password: str
+    password: Annotated[str, Field(min_length=1, max_length=128)]
 
     @field_validator("email")
     @classmethod
@@ -18,7 +22,7 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: RefreshTokenStr
 
 
 class TokenPair(BaseModel):

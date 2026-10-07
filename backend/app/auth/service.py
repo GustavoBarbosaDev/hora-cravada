@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -53,12 +54,12 @@ async def login(
         tenant = await get_tenant_by_slug(session, tenant_slug)
     except NotFoundError:
         # Mesma resposta de uma senha errada, para não revelar quais empresas existem.
-        verify_password(None, password)
+        await asyncio.to_thread(verify_password, None, password)
         raise UnauthorizedError(INVALID_CREDENTIALS) from None
 
     await set_tenant(session, tenant.id)
     user = await session.scalar(select(User).where(User.email == email))
-    valid = verify_password(user.password_hash if user else None, password)
+    valid = await asyncio.to_thread(verify_password, user.password_hash if user else None, password)
     if user is None or not valid or not user.active:
         raise UnauthorizedError(INVALID_CREDENTIALS)
     return await issue_tokens(session, user, settings)
@@ -109,10 +110,11 @@ async def logout(session: AsyncSession, token: str) -> None:
 
 
 async def create_user(session: AsyncSession, tenant_id: uuid.UUID, data: CreateUserRequest) -> User:
+    password_hash = await asyncio.to_thread(hash_password, data.password)
     user = User(
         tenant_id=tenant_id,
         email=data.email,
-        password_hash=hash_password(data.password),
+        password_hash=password_hash,
         role=data.role,
     )
     session.add(user)

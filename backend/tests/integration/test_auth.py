@@ -1,3 +1,5 @@
+import asyncio
+import time
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -10,7 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.auth.deps import TenantSession
 from app.config import Settings
-from app.core.security import Principal, create_access_token
+from app.core.security import Principal, create_access_token, verify_password
 from app.main import create_app
 from app.tenants.deps import PublicSession
 from tests.conftest import JWT_SECRET, Databases
@@ -331,3 +333,51 @@ async def test_public_session_with_unknown_slug_is_not_found(client: AsyncClient
     response = await client.get("/public/nao-existe/user-count")
 
     assert response.status_code == 404
+
+
+async def test_oversized_login_and_refresh_bodies_are_rejected_before_hashing(
+    client: AsyncClient,
+) -> None:
+    company = await signup(client)
+
+    login_response = await client.post(
+        "/auth/login",
+        json={"tenant_slug": company.slug, "email": company.owner_email, "password": "x" * 129},
+    )
+    refresh_response = await client.post("/auth/refresh", json={"refresh_token": "x" * 513})
+    logout_response = await client.post("/auth/logout", json={"refresh_token": "x" * 513})
+
+    assert login_response.status_code == 422
+    assert refresh_response.status_code == 422
+    assert logout_response.status_code == 422
+
+
+async def test_password_verification_does_not_block_the_event_loop(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    company = await signup(client)
+
+    def slow_verify(password_hash: str | None, password: str) -> bool:
+        time.sleep(0.3)
+        return verify_password(password_hash, password)
+
+    monkeypatch.setattr("app.auth.service.verify_password", slow_verify)
+    longest_gap = 0.0
+    running = True
+
+    async def ticker() -> None:
+        nonlocal longest_gap
+        last = time.perf_counter()
+        while running:
+            await asyncio.sleep(0.01)
+            now = time.perf_counter()
+            longest_gap = max(longest_gap, now - last)
+            last = now
+
+    task = asyncio.create_task(ticker())
+    await login(client, company)
+    running = False
+    await task
+
+    # Rodando no event loop, o hash de 0,3 s deixaria o ticker parado por todo esse tempo.
+    assert longest_gap < 0.15
