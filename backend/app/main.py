@@ -10,10 +10,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.router import router as auth_router
 from app.config import get_settings
 from app.core.errors import DependencyUnavailableError, register_error_handlers
 from app.core.logging import configure_logging
 from app.db.session import build_engine, build_sessionmaker, get_session
+from app.tenants.router import router as tenants_router
 
 logger = structlog.get_logger()
 
@@ -32,6 +34,8 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Hora Cravada", lifespan=lifespan)
     register_error_handlers(app)
+    app.include_router(tenants_router)
+    app.include_router(auth_router)
 
     @app.middleware("http")
     async def log_requests(
