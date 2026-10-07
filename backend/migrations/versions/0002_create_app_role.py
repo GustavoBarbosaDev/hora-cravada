@@ -7,6 +7,7 @@ Create Date: 2026-10-06
 
 import re
 
+import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.engine import make_url
 
@@ -33,15 +34,23 @@ def app_role() -> tuple[str, str]:
 
 def upgrade() -> None:
     role, password = app_role()
-    quoted_password = "'" + password.replace("'", "''") + "'"
+    # A senha vai como parâmetro, não no texto do SQL, para não aparecer nos logs de statements.
+    op.execute(
+        sa.text("SELECT set_config('hora.app_password', :password, true)").bindparams(
+            password=password
+        )
+    )
     # O role é do cluster, não do banco: pode já existir (banco de testes, volume antigo).
     op.execute(
         f"""
         DO $$
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
-                CREATE ROLE {role} LOGIN PASSWORD {quoted_password}
-                    NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+                EXECUTE format(
+                    'CREATE ROLE {role} LOGIN PASSWORD %L '
+                    'NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS',
+                    current_setting('hora.app_password')
+                );
             END IF;
         END
         $$

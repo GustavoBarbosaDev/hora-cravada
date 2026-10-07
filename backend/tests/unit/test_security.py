@@ -73,3 +73,12 @@ def test_malformed_refresh_token_is_rejected(token: str) -> None:
 def test_production_refuses_the_development_jwt_secret() -> None:
     with pytest.raises(ValueError, match="JWT_SECRET"):
         Settings(environment="production")
+
+
+def test_production_refuses_a_short_jwt_secret() -> None:
+    with pytest.raises(ValueError, match="32 bytes"):
+        Settings(environment="production", jwt_secret="x" * 31)
+
+
+def test_production_accepts_a_jwt_secret_of_32_bytes() -> None:
+    assert Settings(environment="production", jwt_secret="x" * 32).jwt_secret == "x" * 32

@@ -4,6 +4,7 @@ from typing import Literal, Self
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+MIN_JWT_SECRET_BYTES = 32
 DEV_JWT_SECRET = "dev-only-secret-change-me-before-deploying"
 
 
@@ -21,9 +22,14 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
 
     @model_validator(mode="after")
-    def reject_dev_secret_in_production(self) -> Self:
-        if self.environment == "production" and self.jwt_secret == DEV_JWT_SECRET:
+    def reject_weak_secret_in_production(self) -> Self:
+        if self.environment != "production":
+            return self
+        if self.jwt_secret == DEV_JWT_SECRET:
             raise ValueError("JWT_SECRET precisa ser definido em produção.")
+        # HS256 pede uma chave com pelo menos 256 bits (RFC 7518, seção 3.2).
+        if len(self.jwt_secret.encode()) < MIN_JWT_SECRET_BYTES:
+            raise ValueError(f"JWT_SECRET precisa ter pelo menos {MIN_JWT_SECRET_BYTES} bytes.")
         return self
 
 

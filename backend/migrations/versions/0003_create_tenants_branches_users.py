@@ -5,6 +5,8 @@ Revises: 0002
 Create Date: 2026-10-06
 """
 
+import re
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -18,6 +20,7 @@ down_revision = "0002"
 branch_labels = None
 depends_on = None
 
+IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
 UUID_PK = sa.text("gen_random_uuid()")
 
 
@@ -46,6 +49,8 @@ def upgrade() -> None:
     # A tabela de tenants não tem tenant_id: o slug é resolvido antes de existir contexto.
     # Quem precisa remover um tenant usa o role dono do schema.
     role = make_url(get_settings().database_url).username
+    if not role or not IDENTIFIER.match(role):
+        raise RuntimeError("DATABASE_URL precisa ter um usuário simples (a-z, 0-9, _).")
     op.execute(f"REVOKE DELETE ON tenants FROM {role}")
 
     op.create_table(
