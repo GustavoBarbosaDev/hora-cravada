@@ -65,3 +65,9 @@ Alternativa descartada: consultar o usuário em toda requisição.
 Contexto: o teste de que o profissional não acessa rotas de dono precisa de uma rota de dono real e de usuários com outros papéis.
 Decisão: `GET /users` e `POST /users`, só para `owner`. Edição, desativação e vínculo com `resource_id` ficam para o painel (fase 10) e para os recursos (fase 2).
 Alternativa descartada: rotas fictícias só nos testes.
+
+## `hora_app` não atualiza `tenants`
+
+Contexto: `tenants` não tem RLS, então um UPDATE do role da aplicação alcançaria qualquer empresa, e nenhuma rota da fase 1 edita tenants.
+Decisão: a migration `0005` revoga `UPDATE` de `hora_app` em `tenants`. A edição de empresa (fase 10) concede o privilégio por coluna e filtra pelo tenant do token.
+Alternativa descartada: manter o privilégio e confiar em revisão de código para lembrar do filtro.

@@ -47,15 +47,18 @@ class DependencyUnavailableError(AppError):
 def error_response(
     request: Request, status_code: int, code: str, message: str, details: Any = None
 ) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
     body = {
         "error": {
             "code": code,
             "message": message,
             "details": details,
-            "request_id": getattr(request.state, "request_id", None),
+            "request_id": request_id,
         }
     }
-    return JSONResponse(body, status_code=status_code)
+    # O handler de 500 roda fora do middleware da aplicação, então o header precisa sair daqui.
+    headers = {"x-request-id": request_id} if request_id else None
+    return JSONResponse(body, status_code=status_code, headers=headers)
 
 
 def register_error_handlers(app: FastAPI) -> None:

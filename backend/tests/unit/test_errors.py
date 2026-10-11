@@ -96,6 +96,16 @@ async def test_request_id_from_header_is_echoed_in_response_and_error_body(
     assert response.json()["error"]["request_id"] == "abc123"
 
 
+async def test_unhandled_exception_response_carries_the_request_id_header(
+    client: AsyncClient,
+) -> None:
+    response = await client.get("/boom", headers={"x-request-id": "abc123"})
+
+    assert response.status_code == 500
+    assert response.headers["x-request-id"] == "abc123"
+    assert response.json()["error"]["request_id"] == "abc123"
+
+
 def test_logs_are_emitted_as_json_lines(capsys: pytest.CaptureFixture[str]) -> None:
     structlog.reset_defaults()
     configure_logging("INFO")

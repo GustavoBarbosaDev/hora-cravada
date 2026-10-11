@@ -123,6 +123,22 @@ async def test_app_role_cannot_bypass_row_level_security(app_conn: AsyncConnecti
     assert tuple(row) == (False, False)
 
 
+async def test_app_role_can_read_and_insert_but_not_update_or_delete_tenants(
+    app_conn: AsyncConnection, two_tenants: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    tenant_a, _ = two_tenants
+
+    assert (await app_conn.execute(text("SELECT count(*) FROM tenants"))).scalar_one() >= 2
+    for statement in ("UPDATE tenants SET name = 'x'", "DELETE FROM tenants"):
+        with pytest.raises(DBAPIError, match="permission denied"):
+            await app_conn.execute(text(statement))
+        await app_conn.rollback()
+    await app_conn.execute(
+        text("INSERT INTO tenants (slug, name) VALUES (:slug, 'Nova')"),
+        {"slug": f"t-{tenant_a.hex[:8]}-new"},
+    )
+
+
 async def test_every_table_with_tenant_id_forces_row_level_security(
     migrated_database: Databases,
 ) -> None:

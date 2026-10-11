@@ -36,7 +36,7 @@ CREATE POLICY tenant_isolation ON <tabela>
 
 Sem contexto, o predicado é NULL e nenhuma linha é visível nem gravável. O `WITH CHECK` impede inserir ou mover linhas para outro tenant.
 
-A tabela `tenants` é a exceção: não tem `tenant_id` e não usa RLS, porque o slug é resolvido antes de existir contexto. O role da aplicação não pode apagar tenants.
+A tabela `tenants` é a exceção: não tem `tenant_id` e não usa RLS, porque o slug é resolvido antes de existir contexto. O role da aplicação lê e insere, mas não atualiza nem apaga tenants (migrations `0003` e `0005`).
 
 Um teste (`test_every_table_with_tenant_id_forces_row_level_security`) percorre o catálogo e falha se alguma tabela com `tenant_id` aparecer sem RLS ativa, forçada e com policy. Tabelas novas entram nessa verificação sem alteração no teste.
 

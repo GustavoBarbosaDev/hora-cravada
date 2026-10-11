@@ -230,6 +230,25 @@ async def test_reusing_a_rotated_refresh_token_revokes_the_whole_family(
     assert legitimate.status_code == 401
 
 
+async def test_two_simultaneous_refreshes_of_one_token_let_only_one_through(
+    client: AsyncClient,
+) -> None:
+    tokens = await login(client, await signup(client))
+    body = {"refresh_token": tokens["refresh_token"]}
+
+    first, second = await asyncio.gather(
+        client.post("/auth/refresh", json=body), client.post("/auth/refresh", json=body)
+    )
+
+    assert sorted([first.status_code, second.status_code]) == [200, 401]
+    winner = first if first.status_code == 200 else second
+    # O perdedor foi tratado como reutilização: a família inteira está revogada.
+    after = await client.post(
+        "/auth/refresh", json={"refresh_token": winner.json()["refresh_token"]}
+    )
+    assert after.status_code == 401
+
+
 async def test_logout_revokes_the_refresh_token(client: AsyncClient) -> None:
     tokens = await login(client, await signup(client))
 
@@ -253,6 +272,23 @@ async def test_refresh_token_of_a_deactivated_user_is_rejected(
     await engine.dispose()
 
     response = await client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+
+    assert response.status_code == 401
+
+
+async def test_deactivated_user_is_rejected_by_me_even_with_a_valid_access_token(
+    client: AsyncClient, migrated_database: Databases
+) -> None:
+    company = await signup(client)
+    tokens = await login(client, company)
+    engine = create_async_engine(migrated_database.admin_url)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE users SET active = false WHERE id = :id"), {"id": company.owner_id}
+        )
+    await engine.dispose()
+
+    response = await client.get("/auth/me", headers=bearer(tokens))
 
     assert response.status_code == 401
 
