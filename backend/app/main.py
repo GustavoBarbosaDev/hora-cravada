@@ -11,10 +11,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.router import router as auth_router
+from app.availability.router import router as availability_router
+from app.branches.router import router as branches_router
 from app.config import get_settings
 from app.core.errors import DependencyUnavailableError, register_error_handlers
 from app.core.logging import configure_logging
 from app.db.session import build_engine, build_sessionmaker, get_session
+from app.resources.router import router as resources_router
+from app.services.router import router as services_router
 from app.tenants.router import router as tenants_router
 
 logger = structlog.get_logger()
@@ -36,6 +40,10 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(tenants_router)
     app.include_router(auth_router)
+    app.include_router(branches_router)
+    app.include_router(resources_router)
+    app.include_router(services_router)
+    app.include_router(availability_router)
 
     @app.middleware("http")
     async def log_requests(
