@@ -1,12 +1,10 @@
 import asyncio
 import time
 import uuid
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -16,16 +14,7 @@ from app.core.security import Principal, create_access_token, verify_password
 from app.main import create_app
 from app.tenants.deps import PublicSession
 from tests.conftest import JWT_SECRET, Databases
-
-PASSWORD = "senha-forte-123"
-
-
-@dataclass
-class Company:
-    slug: str
-    owner_email: str
-    owner_id: str
-    tenant_id: str
+from tests.helpers import PASSWORD, bearer, login, signup
 
 
 @pytest.fixture
@@ -43,50 +32,6 @@ def app(migrated_database: Databases) -> FastAPI:
         return {"users": total or 0}
 
     return app
-
-
-@pytest.fixture
-async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
-    async with (
-        app.router.lifespan_context(app),
-        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
-    ):
-        yield client
-
-
-async def signup(client: AsyncClient, name: str = "Barbearia do Seu Zé") -> Company:
-    slug = f"t-{uuid.uuid4().hex[:12]}"
-    email = f"dono@{slug}.com.br"
-    response = await client.post(
-        "/tenants",
-        json={
-            "tenant_name": name,
-            "slug": slug,
-            "owner_email": email,
-            "owner_password": PASSWORD,
-        },
-    )
-    assert response.status_code == 201, response.text
-    body = response.json()
-    return Company(slug, email, body["owner_id"], body["tenant"]["id"])
-
-
-async def login(client: AsyncClient, company: Company, email: str | None = None) -> dict[str, str]:
-    response = await client.post(
-        "/auth/login",
-        json={
-            "tenant_slug": company.slug,
-            "email": email or company.owner_email,
-            "password": PASSWORD,
-        },
-    )
-    assert response.status_code == 200, response.text
-    tokens: dict[str, str] = response.json()
-    return tokens
-
-
-def bearer(tokens: dict[str, str]) -> dict[str, str]:
-    return {"authorization": f"Bearer {tokens['access_token']}"}
 
 
 async def test_signup_creates_tenant_with_an_owner_who_can_log_in(client: AsyncClient) -> None:
