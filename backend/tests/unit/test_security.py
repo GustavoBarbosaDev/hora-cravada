@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from app.config import Settings
+from app.config import DEV_JWT_SECRET, Settings
 from app.core.errors import UnauthorizedError
 from app.core.security import (
     Principal,
@@ -72,7 +72,7 @@ def test_malformed_refresh_token_is_rejected(token: str) -> None:
 
 def test_production_refuses_the_development_jwt_secret() -> None:
     with pytest.raises(ValueError, match="JWT_SECRET"):
-        Settings(environment="production")
+        Settings(environment="production", jwt_secret=DEV_JWT_SECRET)
 
 
 def test_production_refuses_a_short_jwt_secret() -> None:
