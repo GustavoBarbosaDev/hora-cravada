@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.models import RefreshToken, User
 from app.auth.schemas import CreateUserRequest, TokenPair
 from app.config import Settings
-from app.core.errors import ConflictError, NotFoundError, UnauthorizedError
+from app.core.errors import ConflictError, NotFoundError, UnauthorizedError, UnprocessableError
 from app.core.security import (
     Principal,
     create_access_token,
@@ -20,6 +20,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import set_tenant
+from app.resources.models import Resource
 from app.tenants.service import get_tenant_by_slug
 
 INVALID_CREDENTIALS = "E-mail ou senha incorretos."
@@ -110,12 +111,15 @@ async def logout(session: AsyncSession, token: str) -> None:
 
 
 async def create_user(session: AsyncSession, tenant_id: uuid.UUID, data: CreateUserRequest) -> User:
+    if data.resource_id is not None and await session.get(Resource, data.resource_id) is None:
+        raise UnprocessableError("Recurso não encontrado.", details={"field": "resource_id"})
     password_hash = await asyncio.to_thread(hash_password, data.password)
     user = User(
         tenant_id=tenant_id,
         email=data.email,
         password_hash=password_hash,
         role=data.role,
+        resource_id=data.resource_id,
     )
     session.add(user)
     try:
