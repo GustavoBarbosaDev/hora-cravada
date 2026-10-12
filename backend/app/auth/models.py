@@ -2,7 +2,17 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Text, UniqueConstraint, func, true
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Text,
+    UniqueConstraint,
+    func,
+    true,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,7 +28,17 @@ class Role(StrEnum):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("tenant_id", "email"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="uq_users_tenant_id_email"),
+        ForeignKeyConstraint(
+            ["tenant_id", "resource_id"],
+            ["resources.tenant_id", "resources.id"],
+            ondelete="SET NULL (resource_id)",
+        ),
+        CheckConstraint(
+            "resource_id IS NULL OR role = 'professional'", name="resource_only_for_professional"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=UUID_DEFAULT

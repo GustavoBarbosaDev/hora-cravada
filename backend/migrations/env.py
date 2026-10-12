@@ -4,6 +4,9 @@ from alembic import context
 from sqlalchemy.engine import Connection
 
 import app.auth.models  # noqa: F401
+import app.availability.models  # noqa: F401
+import app.resources.models  # noqa: F401
+import app.services.models  # noqa: F401
 import app.tenants.models  # noqa: F401
 from app.config import get_settings
 from app.db.base import Base
