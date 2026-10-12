@@ -8,7 +8,7 @@ from app.auth.models import Role, User
 from app.core.errors import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.db.session import set_tenant
-from app.tenants.models import Tenant
+from app.tenants.models import Branch, Tenant
 from app.tenants.schemas import SignupRequest
 
 
@@ -28,6 +28,7 @@ async def signup(session: AsyncSession, data: SignupRequest) -> tuple[Tenant, Us
         raise ConflictError("Esse endereço já está em uso.", details={"field": "slug"}) from exc
 
     await set_tenant(session, tenant.id)
+    session.add(Branch(tenant_id=tenant.id, name="Principal", timezone=data.timezone))
     password_hash = await asyncio.to_thread(hash_password, data.owner_password)
     owner = User(
         tenant_id=tenant.id,

@@ -71,3 +71,64 @@ Alternativa descartada: rotas fictícias só nos testes.
 Contexto: `tenants` não tem RLS, então um UPDATE do role da aplicação alcançaria qualquer empresa, e nenhuma rota da fase 1 edita tenants.
 Decisão: a migration `0005` revoga `UPDATE` de `hora_app` em `tenants`. A edição de empresa (fase 10) concede o privilégio por coluna e filtra pelo tenant do token.
 Alternativa descartada: manter o privilégio e confiar em revisão de código para lembrar do filtro.
+
+## Referências entre tabelas de negócio levam `tenant_id`
+
+Contexto: o RLS valida só a linha gravada, e a checagem de FK ignora o RLS. Uma FK simples aceita o id de um recurso de outra empresa.
+Decisão: FKs compostas `(tenant_id, x_id)` para `UNIQUE (tenant_id, id)` da tabela referenciada, inclusive `users.resource_id`. `ON DELETE SET NULL (resource_id)` em `users` mantém o `tenant_id` intacto.
+Alternativa descartada: validar o tenant do id na aplicação, que protegeria só as rotas que lembrassem de fazê-lo.
+
+## Horários guardados como minutos desde a meia-noite
+
+Contexto: regras semanais precisam de fim de expediente às 24:00, que o tipo `time` não representa.
+Decisão: `start_minute` e `end_minute` (smallint, 0 a 1440). A API continua em `"HH:MM"`.
+Alternativa descartada: `time`, que limitaria o fim a 23:59.
+
+## Sobreposição de regras decidida por exclusion constraint
+
+Contexto: a validação "intervalos da mesma regra não se sobrepõem" precisa valer sob requisições simultâneas.
+Decisão: `EXCLUDE USING gist` sobre `(resource_id, weekday, int4range(início, fim))`; a aplicação só traduz o erro `23P01` em `409`.
+Alternativa descartada: consultar e inserir na aplicação, com janela de corrida.
+
+## Exceções de disponibilidade: `open` substitui, `closed` subtrai
+
+Contexto: "horário especial" e "folga" podem coexistir na mesma data e o plano não define a precedência.
+Decisão: documentada em `architecture.md`; `open` substitui as regras semanais da data e `closed` remove o que sobrou, com `closed` vencendo.
+Alternativa descartada: `open` somar às regras semanais, que impediria encurtar o expediente num dia especial.
+
+## Leitura aberta a todos os papéis, escrita só do dono
+
+Contexto: recepção e profissionais precisam ver recursos e serviços para operar a agenda; o plano só exige que profissional não acesse rotas de dono.
+Decisão: `GET` com qualquer papel autenticado; `POST`, `PATCH`, `PUT` e `DELETE` só `owner`.
+Alternativa descartada: restringir a leitura ao dono, o que obrigaria o painel a duplicar endpoints.
+
+## Regras e exceções não têm edição
+
+Contexto: são registros pequenos, sem relações dependentes.
+Decisão: criar e apagar. Corrigir um horário é apagar e recriar.
+Alternativa descartada: `PATCH`, que repetiria a validação de intervalo e o tratamento da constraint.
+
+## Vínculo recurso-serviço por substituição do conjunto
+
+Contexto: o painel envia a lista final de quem executa o serviço.
+Decisão: `PUT /services/{id}/resources` troca o conjunto inteiro numa transação, com lock na linha do serviço para serializar chamadas simultâneas.
+Alternativa descartada: um `POST` e um `DELETE` por vínculo, com mais chamadas e estados intermediários.
+
+## Remoção definitiva de recursos e serviços por enquanto
+
+Contexto: ainda não existem reservas.
+Decisão: `DELETE` apaga o registro e leva horários e vínculos junto. Quando `booking_resources` existir (fase 4), a FK será restritiva e o caminho normal passa a ser desativar (`active = false`).
+Alternativa descartada: só desativar agora, sem necessidade enquanto nada referencia os registros.
+
+## Fuso horário validado pela lista do `tzdata`
+
+Contexto: `ZoneInfo` aceita apelidos do sistema (`localtime`), e `available_timezones()` os lista; qualquer um passaria como fuso de filial.
+Decisão: validar contra o arquivo `zones` do pacote `tzdata`, que passa a ser dependência explícita.
+Alternativa descartada: `ZoneInfo(valor)` direto, que foi o que o cadastro de empresa fazia.
+
+## `custom_fields_schema` fica para a fase 11
+
+Contexto: a coluna aparece no modelo de referência de `services`, mas só o form builder da fase 11 a lê.
+Decisão: não criar a coluna agora; a fase 11 a adiciona com a validação do schema.
+Alternativa descartada: coluna JSONB sem validação nem uso.
+

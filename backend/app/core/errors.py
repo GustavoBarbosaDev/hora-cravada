@@ -39,6 +39,11 @@ class ConflictError(AppError):
     code = "conflict"
 
 
+class UnprocessableError(AppError):
+    status_code = 422
+    code = "validation_error"
+
+
 class DependencyUnavailableError(AppError):
     status_code = 503
     code = "dependency_unavailable"

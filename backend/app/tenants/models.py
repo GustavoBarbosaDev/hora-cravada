@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,6 +27,8 @@ class Tenant(Base):
 
 class Branch(Base):
     __tablename__ = "branches"
+    # Alvo das FKs compostas (tenant_id, branch_id) dos recursos.
+    __table_args__ = (UniqueConstraint("tenant_id", "id", name="uq_branches_tenant_id_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=UUID_DEFAULT

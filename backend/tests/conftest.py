@@ -1,17 +1,20 @@
 import asyncio
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import get_settings
+from app.main import create_app
 
 APP_ROLE = "hora_app"
 APP_PASSWORD = "hora_app"
@@ -92,3 +95,17 @@ def migrated_database(
     point_settings_at(monkeypatch, shared_database)
     yield shared_database
     get_settings.cache_clear()
+
+
+@pytest.fixture
+def app(migrated_database: Databases) -> FastAPI:
+    return create_app()
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        yield client

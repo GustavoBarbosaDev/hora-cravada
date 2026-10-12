@@ -50,3 +50,51 @@ Um teste (`test_every_table_with_tenant_id_forces_row_level_security`) percorre 
 ## Papéis
 
 `owner`, `reception` e `professional`. A dependência `require_roles(...)` devolve 403 quando o papel do token não está na lista. Em 401 e 403 o formato de erro é o mesmo das demais respostas (ver `app/core/errors.py`).
+
+## Catálogo e disponibilidade
+
+Recursos, serviços e horários são o que o motor de slots (fase 3) lê para calcular a agenda.
+
+| Tabela | Conteúdo |
+|---|---|
+| `resources` | quem ou o que é reservado: `kind` (identificador livre, como `barbeiro`, `medico`, `sala`), capacidade, atributos em JSON, filial |
+| `services` | duração, buffers antes e depois, preço em centavos, `required_resource_kinds` (tipos de recurso que precisam estar livres além de quem executa) |
+| `resource_services` | quais recursos executam cada serviço |
+| `availability_rules` | intervalos semanais por recurso; vários por dia para pausas |
+| `availability_exceptions` | folgas, feriados e horários especiais, por recurso ou para a empresa toda |
+
+### Chaves estrangeiras compostas
+
+Toda referência entre tabelas de negócio inclui `tenant_id` (por exemplo, `(tenant_id, resource_id)` apontando para `resources (tenant_id, id)`). O RLS só confere a linha que está sendo gravada; a checagem de FK do PostgreSQL ignora o RLS. Com uma FK simples, um dono poderia vincular um serviço seu a um recurso de outra empresa se soubesse o id. Com a FK composta, o banco recusa. Por isso `branches`, `resources` e `services` têm `UNIQUE (tenant_id, id)`.
+
+### Horários
+
+- `weekday` segue `date.weekday()`: 0 é segunda-feira, 6 é domingo.
+- Horários são minutos desde a meia-noite local da filial, no intervalo `[início, fim)`, de 0 a 1440. A API usa `"HH:MM"` e aceita `"24:00"` como fim. O tipo `time` do PostgreSQL e do Python não representa 24:00, e uma sala que abre até a meia-noite é comum.
+- Intervalos encostados (`09:00-12:00` e `12:00-14:00`) são permitidos.
+- Datas de exceção são datas locais da filial. O fuso da filial (`branches.timezone`) é validado contra a lista do pacote `tzdata`. A conversão para UTC é responsabilidade do motor de slots.
+
+### Sobreposição de regras
+
+A garantia de que dois intervalos do mesmo recurso e dia não se sobrepõem é uma exclusion constraint, não uma checagem na aplicação:
+
+```sql
+EXCLUDE USING gist (resource_id WITH =, weekday WITH =, int4range(start_minute, end_minute) WITH &&)
+```
+
+Duas requisições simultâneas passariam juntas por uma checagem na aplicação; o banco serializa. A violação (`23P01`) vira `409`. Há um teste de concorrência em `tests/concurrency/`.
+
+### Como as exceções se combinam com as regras (contrato para a fase 3)
+
+Para um recurso e uma data local:
+
+1. Se existe alguma exceção `open` aplicável (do recurso ou da empresa), as janelas `open` substituem as regras semanais daquela data.
+2. Sem `open`, valem as regras semanais do dia da semana.
+3. Exceções `closed` removem o que sobrou, mesmo de uma janela `open`: sem horário, o dia inteiro; com horário, só aquele intervalo.
+
+Exceção com `resource_id` nulo vale para todos os recursos da empresa.
+
+### Papéis
+
+Qualquer usuário autenticado lê filiais, recursos, serviços e horários (o painel precisa deles para qualquer perfil). Só o `owner` cria, altera e remove.
+

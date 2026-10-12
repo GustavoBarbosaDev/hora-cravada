@@ -35,10 +35,33 @@ def test_migrations_install_and_remove_required_extensions(use_database: Databas
 def test_migrations_create_and_drop_tenant_tables(use_database: Databases) -> None:
     config = Config("alembic.ini")
     sql = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-    expected = {"tenants", "branches", "users", "refresh_tokens"}
+    expected = {
+        "tenants",
+        "branches",
+        "users",
+        "refresh_tokens",
+        "resources",
+        "services",
+        "resource_services",
+        "availability_rules",
+        "availability_exceptions",
+    }
 
     command.upgrade(config, "head")
     assert expected <= query_names(use_database.admin_url, sql)
 
     command.downgrade(config, "0001")
     assert not expected & query_names(use_database.admin_url, sql)
+
+
+def test_catalog_migration_downgrades_without_touching_users(use_database: Databases) -> None:
+    config = Config("alembic.ini")
+    sql = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+
+    command.upgrade(config, "head")
+    command.downgrade(config, "0005")
+
+    tables = query_names(use_database.admin_url, sql)
+    assert {"users", "branches"} <= tables
+    assert not {"resources", "services"} & tables
+    command.upgrade(config, "head")

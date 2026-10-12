@@ -1,6 +1,6 @@
 COMPOSE ?= docker compose
 
-.PHONY: up down test lint migrate
+.PHONY: up down test lint migrate seed
 
 up:
 	$(COMPOSE) up -d --build
@@ -17,3 +17,6 @@ lint:
 
 migrate:
 	$(COMPOSE) run --rm api alembic upgrade head
+
+seed:
+	$(COMPOSE) run --rm api python -m app.seed

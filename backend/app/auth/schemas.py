@@ -1,7 +1,7 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.auth.models import Role
 from app.tenants.schemas import Password, Slug
@@ -37,14 +37,22 @@ class UserOut(BaseModel):
     email: str
     role: Role
     active: bool
+    resource_id: uuid.UUID | None
 
 
 class CreateUserRequest(BaseModel):
     email: EmailStr
     password: Password
     role: Role
+    resource_id: uuid.UUID | None = None
 
     @field_validator("email")
     @classmethod
     def lowercase_email(cls, value: str) -> str:
         return value.lower()
+
+    @model_validator(mode="after")
+    def resource_only_for_professionals(self) -> Self:
+        if self.resource_id is not None and self.role != Role.professional:
+            raise ValueError("Só profissionais podem ser vinculados a um recurso.")
+        return self

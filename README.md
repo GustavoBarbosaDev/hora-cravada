@@ -2,7 +2,7 @@
 
 Plataforma de agendamento multi-tenant. O núcleo (recursos, serviços, disponibilidade e reservas) é genérico e se adapta a barbearias, clínicas e locação de salas por configuração. O ponto central é impedir conflito de horários sob concorrência: a garantia fica no banco, com uma exclusion constraint do PostgreSQL.
 
-O projeto está em desenvolvimento. Hoje existem a fundação (API, migrations, worker, frontend mínimo, CI) e o isolamento entre empresas: cadastro de tenant, login com JWT e refresh rotativo, papéis e Row Level Security.
+O projeto está em desenvolvimento. Hoje existem a fundação (API, migrations, worker, frontend mínimo, CI), o isolamento entre empresas (cadastro de tenant, login com JWT e refresh rotativo, papéis e Row Level Security) e o cadastro do que a agenda precisa: filiais, recursos, serviços e horários de atendimento.
 
 ## Requisitos
 
@@ -26,6 +26,16 @@ Serviços:
 
 As migrations rodam sozinhas quando a API sobe. Para rodar manualmente: `make migrate`.
 
+`make seed` cria as empresas `barbearia-seu-ze`, `clinica-vida-plena` e `coworking-ponte`. O login usa o slug e a senha `senha-de-desenvolvimento`:
+
+| Empresa (`tenant_slug`) | Dono |
+|---|---|
+| `barbearia-seu-ze` | `ze@barbeariaseuze.com.br` |
+| `clinica-vida-plena` | `direcao@vidaplena.med.br` |
+| `coworking-ponte` | `contato@espacoponte.com.br` |
+
+O comando recusa rodar com `ENVIRONMENT=production`.
+
 ## Comandos
 
 | Comando | O que faz |
@@ -35,9 +45,10 @@ As migrations rodam sozinhas quando a API sobe. Para rodar manualmente: `make mi
 | `make test` | Roda a suíte de testes do backend |
 | `make lint` | ruff, mypy, ESLint e Prettier |
 | `make migrate` | Aplica as migrations |
+| `make seed` | Cria três empresas de exemplo (barbearia, clínica e salas); pode ser repetido |
 
 ## Estrutura
 
 - `backend/`: FastAPI, SQLAlchemy 2 async, Alembic, worker ARQ
 - `frontend/`: Next.js (App Router)
-- `docs/`: arquitetura (modelo de tenant), decisões e backlog
+- `docs/`: arquitetura (tenants, catálogo e disponibilidade), decisões, backlog e relatórios por fase
