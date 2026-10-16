@@ -2,7 +2,7 @@
 
 Plataforma de agendamento multi-tenant. O núcleo (recursos, serviços, disponibilidade e reservas) é genérico e se adapta a barbearias, clínicas e locação de salas por configuração. O ponto central é impedir conflito de horários sob concorrência: a garantia fica no banco, com uma exclusion constraint do PostgreSQL.
 
-O projeto está em desenvolvimento. Hoje existem a fundação (API, migrations, worker, frontend mínimo, CI), o isolamento entre empresas (cadastro de tenant, login com JWT e refresh rotativo, papéis e Row Level Security) e o cadastro do que a agenda precisa: filiais, recursos, serviços e horários de atendimento.
+O projeto está em desenvolvimento. Hoje existem a fundação (API, migrations, worker, frontend mínimo, CI), o isolamento entre empresas (cadastro de tenant, login com JWT e refresh rotativo, papéis e Row Level Security) e o cadastro do que a agenda precisa: filiais, recursos, serviços e horários de atendimento, mais o cálculo de horários livres (`GET /public/{slug}/slots`).
 
 ## Requisitos
 
@@ -51,4 +51,4 @@ O comando recusa rodar com `ENVIRONMENT=production`.
 
 - `backend/`: FastAPI, SQLAlchemy 2 async, Alembic, worker ARQ
 - `frontend/`: Next.js (App Router)
-- `docs/`: arquitetura (tenants, catálogo e disponibilidade), decisões, backlog e relatórios por fase
+- `docs/`: arquitetura (tenants, catálogo, disponibilidade e motor de slots), decisões, backlog e relatórios por fase
