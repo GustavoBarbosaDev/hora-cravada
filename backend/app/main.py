@@ -19,6 +19,7 @@ from app.core.logging import configure_logging
 from app.db.session import build_engine, build_sessionmaker, get_session
 from app.resources.router import router as resources_router
 from app.services.router import router as services_router
+from app.slots.router import router as slots_router
 from app.tenants.router import router as tenants_router
 
 logger = structlog.get_logger()
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(resources_router)
     app.include_router(services_router)
     app.include_router(availability_router)
+    app.include_router(slots_router)
 
     @app.middleware("http")
     async def log_requests(

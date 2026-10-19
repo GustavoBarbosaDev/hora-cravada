@@ -132,3 +132,39 @@ Contexto: a coluna aparece no modelo de referência de `services`, mas só o for
 Decisão: não criar a coluna agora; a fase 11 a adiciona com a validação do schema.
 Alternativa descartada: coluna JSONB sem validação nem uso.
 
+
+## Grade de horários por tempo decorrido, não por relógio
+
+Contexto: em dia de horário de verão o relógio local repete ou pula uma hora; uma grade por hora de relógio perde os slots da hora repetida ou inventa um na hora que não existe.
+Decisão: os inícios candidatos são `meia-noite local + n × passo`, calculados em UTC. Os horários das regras continuam em minutos locais e são convertidos por `local_instant`; num horário inexistente vale o deslocamento anterior ao salto e, num repetido, a primeira ocorrência.
+Alternativa descartada: grade em hora de relógio, que dá 24 slots por hora cheia em qualquer dia.
+
+## Buffers ocupam o recurso, mas não precisam caber no expediente
+
+Contexto: um corte de 30 minutos com 5 de limpeza depois, no último horário do dia, é uma situação comum.
+Decisão: só o serviço precisa caber na janela aberta; `buffer_antes` e `buffer_depois` são conferidos contra reservas existentes.
+Alternativa descartada: exigir os buffers dentro do expediente, o que removeria o último horário de todo dia.
+
+## Janelas encostadas viram uma só
+
+Contexto: duas regras `09:00-12:00` e `12:00-14:00` são permitidas e uma sala aberta até 24:00 continua aberta às 00:00.
+Decisão: o motor une janelas que se encostam, também entre dias, antes de testar se o serviço cabe.
+Alternativa descartada: tratar cada regra isoladamente, o que proibiria serviços que começam numa regra e terminam na seguinte sem pausa real.
+
+## Filial obrigatória quando o serviço tem mais de uma
+
+Contexto: o fuso é da filial e os recursos pertencem a uma filial; juntar horários de filiais diferentes numa lista só mistura fusos.
+Decisão: `branch_id` é opcional quando só há uma filial com executores; com mais de uma, a resposta é 422. Recursos exigidos por tipo vêm sempre da mesma filial do executor.
+Alternativa descartada: devolver os slots agrupados por filial, mais complexo para uma página de agendamento que pergunta a unidade antes.
+
+## Cache em Redis fica para a fase 4
+
+Contexto: o plano pede cache por (empresa, serviço, dia) invalidado quando uma reserva muda, mas ainda não existem reservas para invalidá-lo.
+Decisão: não implementar o cache agora; `load_busy` é o ponto único que a fase 4 troca ao criar `bookings`, e a invalidação entra junto com a escrita de reservas.
+Alternativa descartada: cache com TTL curto sem invalidação, que serviria horários já ocupados.
+
+## Antecedência em `tenants.settings`
+
+Contexto: o motor precisa de antecedência mínima e máxima, mas a edição de configurações só chega na fase 10.
+Decisão: valores lidos de `settings["slots"]` (`min_notice_min`, `max_advance_days`) com padrão 0 e 90 dias; configuração inválida cai no padrão em vez de derrubar a agenda pública.
+Alternativa descartada: constantes no código, que obrigariam uma migração de comportamento quando as configurações existirem.

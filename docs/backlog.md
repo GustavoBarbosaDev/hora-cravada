@@ -15,3 +15,8 @@ Itens fora do escopo da fase em que apareceram.
 - Remover um recurso ou serviço enquanto outra requisição o referencia (vínculo, filial) pode terminar em 500 por violação de FK na corrida. Traduzir para 409 se aparecer em uso real.
 - Trocar o fuso de uma filial não revisa reservas futuras; tratar na fase 4, quando existirem reservas.
 - `services.custom_fields_schema` entra na fase 11 (ver decisões).
+- Cache em Redis dos slots por (empresa, serviço, dia), invalidado ao criar ou cancelar reserva (fase 4, junto com `bookings`).
+- `load_busy` (`app/slots/service.py`) devolve vazio até existir `booking_resources`; trocar na fase 4 e cobrir com teste de slot que some após reservar.
+- `resources.capacity` não entra no cálculo: cada recurso atende uma reserva por vez. Definir na fase 4 se capacidade maior que 1 (auditório, sala compartilhada) vira várias reservas simultâneas ou só limite de participantes.
+- Rota para o dono editar `settings["slots"]` (antecedência mínima e máxima) junto de "editar empresa" (fase 10).
+- Não há rota pública para listar serviços, recursos e filiais da empresa; entra com a página de agendamento (fase 7).
