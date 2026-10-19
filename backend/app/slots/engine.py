@@ -44,7 +44,12 @@ class Schedule:
     resource_id: uuid.UUID
     weekly: Mapping[int, Sequence[Span]] = field(default_factory=dict)
     exceptions: Mapping[datetime.date, Sequence[ExceptionWindow]] = field(default_factory=dict)
+    # Capacidade 1: `busy` é tudo que está ocupado. Capacidade maior: `busy_by_seat` traz os
+    # intervalos de cada vaga que tem reserva (a mesma divisão que a exclusion constraint do banco
+    # usa), e o recurso só está livre se alguma vaga estiver livre no intervalo inteiro.
     busy: Sequence[Interval] = ()
+    capacity: int = 1
+    busy_by_seat: Sequence[Sequence[Interval]] = ()
 
 
 @dataclass(frozen=True)
@@ -154,8 +159,16 @@ def _open_windows(
     return by_day, merged
 
 
-def _is_free(busy: Sequence[Interval], start: datetime.datetime, end: datetime.datetime) -> bool:
-    return not any(busy_start < end and start < busy_end for busy_start, busy_end in busy)
+def _is_free(schedule: Schedule, start: datetime.datetime, end: datetime.datetime) -> bool:
+    def clear(busy: Sequence[Interval]) -> bool:
+        return not any(busy_start < end and start < busy_end for busy_start, busy_end in busy)
+
+    if schedule.capacity == 1:
+        return clear(schedule.busy)
+    # `busy_by_seat` só lista vagas que têm alguma reserva; uma vaga que nunca foi usada está livre.
+    return len(schedule.busy_by_seat) < schedule.capacity or any(
+        clear(busy) for busy in schedule.busy_by_seat
+    )
 
 
 def free_starts(
@@ -190,7 +203,7 @@ def free_starts(
             index = bisect_right(window_starts, start) - 1
             if index < 0 or start + duration > windows[index][1]:
                 continue
-            if _is_free(schedule.busy, start - before, start + duration + after):
+            if _is_free(schedule, start - before, start + duration + after):
                 starts.append(start)
     return sorted(set(starts))
 

@@ -1,9 +1,11 @@
 import uuid
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFoundError, UnprocessableError
+from app.core.errors import ConflictError, NotFoundError, UnprocessableError
+from app.db.errors import FOREIGN_KEY_VIOLATION, sqlstate
 from app.resources.models import Resource
 from app.services.models import ResourceService, Service
 from app.services.schemas import ServiceIn, ServicePatch
@@ -38,8 +40,14 @@ async def update_service(
 
 
 async def delete_service(session: AsyncSession, service_id: uuid.UUID) -> None:
-    await session.delete(await get_service(session, service_id))
-    await session.flush()
+    item = await get_service(session, service_id)
+    try:
+        await session.delete(item)
+        await session.flush()
+    except IntegrityError as exc:
+        if sqlstate(exc) != FOREIGN_KEY_VIOLATION:
+            raise
+        raise ConflictError("O serviço tem reservas; desative-o em vez de apagar.") from exc
 
 
 async def list_service_resources(session: AsyncSession, service_id: uuid.UUID) -> list[uuid.UUID]:

@@ -46,3 +46,4 @@ async def get_tenant_session(
 TenantSession = Annotated[AsyncSession, Depends(get_tenant_session)]
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 OwnerPrincipal = Annotated[Principal, Depends(require_roles(Role.owner))]
+FrontDeskPrincipal = Annotated[Principal, Depends(require_roles(Role.owner, Role.reception))]

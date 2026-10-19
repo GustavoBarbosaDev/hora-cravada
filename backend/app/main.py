@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.router import router as auth_router
 from app.availability.router import router as availability_router
+from app.bookings.router import public_router as public_bookings_router
+from app.bookings.router import router as bookings_router
 from app.branches.router import router as branches_router
 from app.config import get_settings
 from app.core.errors import DependencyUnavailableError, register_error_handlers
@@ -46,6 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(services_router)
     app.include_router(availability_router)
     app.include_router(slots_router)
+    app.include_router(public_bookings_router)
+    app.include_router(bookings_router)
 
     @app.middleware("http")
     async def log_requests(

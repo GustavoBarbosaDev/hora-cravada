@@ -168,3 +168,36 @@ Alternativa descartada: cache com TTL curto sem invalidação, que serviria hor�
 Contexto: o motor precisa de antecedência mínima e máxima, mas a edição de configurações só chega na fase 10.
 Decisão: valores lidos de `settings["slots"]` (`min_notice_min`, `max_advance_days`) com padrão 0 e 90 dias; configuração inválida cai no padrão em vez de derrubar a agenda pública.
 Alternativa descartada: constantes no código, que obrigariam uma migração de comportamento quando as configurações existirem.
+
+
+## Capacidade como vagas numeradas
+
+Contexto: uma sala com capacidade 3 aceita três reservas ao mesmo tempo, mas uma exclusion constraint só sabe dizer "nenhuma sobreposição".
+Decisão: cada reserva ocupa uma vaga (`seat`, de 1 até a capacidade) e a constraint é por (recurso, vaga). O motor usa a mesma regra: o recurso está livre se alguma vaga estiver livre no intervalo inteiro. A garantia continua no banco.
+Consequência: a regra é mais estrita que "no máximo N ao mesmo tempo". Com capacidade 2, reservas 09:00-09:30 na vaga 1 e 10:30-11:00 na vaga 2 impedem um pedido 09:00-11:00 mesmo que nunca haja duas ao mesmo tempo. Aceito pela simplicidade; reabrir se salas com durações muito variadas virarem caso real.
+Alternativa descartada: contar sobreposições na aplicação, que reabre a janela de concorrência que a constraint fecha.
+
+## Buffers gravados na reserva
+
+Contexto: um corte de 30 minutos com 5 de limpeza ocupa o barbeiro por 35.
+Decisão: `booking_resources` guarda `busy_start` e `busy_end` já com os buffers do serviço no momento da reserva, e a constraint os protege. O motor compara o intervalo ocupado do candidato (com buffers) com o das reservas (com buffers). Dois buffers que se sobrepõem entre si também bloqueiam, o que é conservador.
+Alternativa descartada: guardar só o horário do serviço e checar buffers no motor, que deixaria o banco aceitar o que a agenda recusa.
+
+## Reserva pública sem login e cliente por telefone
+
+Contexto: o cliente final não tem conta.
+Decisão: o cliente é identificado pelo telefone normalizado (só dígitos e `+` inicial) dentro da empresa. Telefone já conhecido reaproveita o cadastro sem alterar nome ou e-mail, porque a rota é pública. Telefones com e sem `+55` contam como números diferentes.
+Alternativa descartada: atualizar o cadastro a cada reserva, que deixaria qualquer um reescrever o dado de outra pessoa.
+
+## Travar os recursos antes de inserir
+
+Contexto: um teste de concorrência com inícios sobrepostos mas diferentes (09:00, 09:15, 09:05...) causou deadlock no PostgreSQL: cada inserção espera a outra na exclusion constraint.
+Decisão: antes de inserir, a reserva trava as linhas dos recursos envolvidos em ordem de id (`FOR NO KEY UPDATE`). Reservas que não compartilham recurso não se bloqueiam. A constraint continua como garantia final.
+Alternativa descartada: repetir a transação após deadlock, que esconde o problema e piora sob carga.
+
+## Cache de slots em Redis adiado de novo
+
+Contexto: o plano previa cache por (empresa, serviço, dia) invalidado a cada reserva.
+Decisão: não implementar na fase 4. A criação de reserva sempre confere o banco, então um cache nunca causaria conflito, só custo de leitura; não há medição que o justifique, e os testes ainda não têm Redis. Quando houver, a opção mais simples é um contador de versão por empresa incrementado a cada reserva criada ou cancelada, e a chave do cache incluir a versão, com TTL curto por causa da antecedência mínima e das mudanças de agenda.
+Alternativa descartada: cache por dia, que quebra a união de janelas que atravessam a meia-noite.
+

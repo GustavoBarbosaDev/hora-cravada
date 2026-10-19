@@ -45,6 +45,9 @@ def test_migrations_create_and_drop_tenant_tables(use_database: Databases) -> No
         "resource_services",
         "availability_rules",
         "availability_exceptions",
+        "customers",
+        "bookings",
+        "booking_resources",
     }
 
     command.upgrade(config, "head")

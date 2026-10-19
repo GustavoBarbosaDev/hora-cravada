@@ -615,3 +615,44 @@ def test_every_supported_step_yields_aligned_starts(step: int) -> None:
 
     assert len(result) == 180 // step
     assert all(slot.start.minute % step == 0 for slot in result)
+
+
+def room(capacity: int, *seats: list[tuple[datetime.datetime, datetime.datetime]]) -> Schedule:
+    return Schedule(
+        resource_id=uuid.uuid4(),
+        weekly={0: [(540, 660)]},
+        capacity=capacity,
+        busy_by_seat=list(seats),
+    )
+
+
+def starts_of(found: list[Slot]) -> list[datetime.datetime]:
+    return [slot.start for slot in found]
+
+
+def test_a_room_with_an_unused_seat_is_free_even_if_other_seats_are_taken() -> None:
+    hour = (at(MONDAY, 9), at(MONDAY, 10))
+
+    found = slots([room(3, [hour], [hour])], days=[MONDAY], service=ServiceTiming(60))
+
+    assert at(MONDAY, 9) in starts_of(found)
+
+
+def test_a_room_with_every_seat_taken_is_busy() -> None:
+    hour = (at(MONDAY, 9), at(MONDAY, 10))
+
+    found = slots([room(2, [hour], [hour])], days=[MONDAY], service=ServiceTiming(60))
+
+    assert starts_of(found) == [at(MONDAY, 10)]
+
+
+def test_a_seat_free_for_the_whole_interval_is_needed_not_just_free_at_each_instant() -> None:
+    # Cada vaga tem uma reserva em pontos diferentes do intervalo candidato (09:00-11:00): em
+    # nenhum instante as duas estão ocupadas, mas nenhuma vaga fica livre o tempo todo, e é assim
+    # que o banco decide (a restrição é por vaga).
+    first = [(at(MONDAY, 9), at(MONDAY, 9, 30))]
+    second = [(at(MONDAY, 10, 30), at(MONDAY, 11))]
+
+    found = slots([room(2, first, second)], days=[MONDAY], service=ServiceTiming(120))
+
+    assert found == []
