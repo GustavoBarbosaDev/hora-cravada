@@ -112,7 +112,7 @@ Regras e exceções ficam em minutos locais da filial. Tudo que é comparado com
 1. Para cada dia, o horário aberto do recurso sai das regras semanais e das exceções (precedência na seção anterior). Janelas que se encostam são unidas, inclusive entre dias: uma sala aberta até 24:00 e a partir de 00:00 permite um serviço atravessar a meia-noite.
 2. Os inícios candidatos seguem uma grade de `step_min` minutos de tempo decorrido desde a meia-noite local. Num dia de 25 horas a hora repetida também tem slots.
 3. O serviço (sem buffers) precisa caber inteiro numa janela aberta. Os buffers não precisam: ocupam o recurso, mas podem passar do fim do expediente.
-4. O intervalo ocupado, de `início - buffer_antes` a `fim + buffer_depois`, não pode se sobrepor a nenhuma reserva do recurso. Reservas encostadas não bloqueiam.
+4. O intervalo ocupado, de `início - buffer_antes` a `fim + buffer_depois`, não pode se sobrepor ao intervalo ocupado de nenhuma reserva do recurso (que também inclui os buffers dela). Reservas encostadas não bloqueiam. Recurso com capacidade maior que 1 tem uma vaga por unidade de capacidade e basta uma vaga livre no intervalo inteiro.
 5. Serviço com `required_resource_kinds`: para cada tipo, precisa existir outro recurso da mesma filial livre no mesmo intervalo, com as mesmas regras de horário e buffers. Vale o primeiro livre na ordem recebida (nome, depois id), o que torna a escolha determinística.
 6. Descartam-se inícios antes de `agora + antecedência mínima` e depois de `agora + antecedência máxima`.
 
@@ -158,3 +158,46 @@ Lida de `tenants.settings["slots"]`: `min_notice_min` (padrão 0) e `max_advance
 | Antecedência mínima e máxima, e horários passados | `test_minimum_notice_pushes_the_first_slot_forward`, `test_maximum_advance_cuts_the_far_end`, `test_slots_in_the_past_are_dropped` |
 | Fuso da filial define o instante UTC | `test_branch_timezone_decides_the_utc_instant` (API) |
 | Isolamento entre empresas | `test_a_company_cannot_query_the_service_of_another`, `test_another_company_rooms_and_holidays_do_not_leak` |
+
+## Reservas
+
+Três tabelas, todas com `tenant_id`, RLS e FK composta com o tenant:
+
+| Tabela | Conteúdo |
+|---|---|
+| `customers` | cliente final, sem login; único por (empresa, telefone) |
+| `bookings` | filial, serviço, cliente, início e fim em UTC, e uma cópia da duração, dos buffers e do preço do serviço; `status` `confirmed` ou `cancelled` |
+| `booking_resources` | um registro por recurso ocupado: `seat` (vaga de 1 até a capacidade), `busy_start` e `busy_end` (já com os buffers) e `active` |
+
+A garantia contra conflito é uma exclusion constraint, não código:
+
+```sql
+EXCLUDE USING gist (resource_id WITH =, seat WITH =, tstzrange(busy_start, busy_end) WITH &&) WHERE (active)
+```
+
+Cancelar marca `active = false`, o que tira o registro da restrição e libera o horário sem apagar o histórico. As FKs para recursos, serviços, filiais e clientes não têm `ON DELETE`: apagar algo com reserva dá 409 e o caminho é desativar.
+
+### Criar uma reserva
+
+`POST /public/{slug}/bookings`, sem login. Corpo: `service_id`, `start` (com fuso), `customer` (nome, telefone, e-mail opcional), e opcionalmente `branch_id`, `resource_id` e `notes`.
+
+1. O motor de slots roda com a grade de 5 minutos (contém a grade de qualquer passo oferecido) e o `start` precisa ser um dos slots. Isso confere horário de funcionamento, exceções, antecedência e recursos livres. Se não for, 409.
+2. Os recursos de todas as atribuições possíveis são travados numa ordem fixa (`FOR NO KEY UPDATE`). Sem isso, duas inserções simultâneas de intervalos sobrepostos mas diferentes esperam uma pela outra e o PostgreSQL derruba uma por deadlock.
+3. O cliente é encontrado ou criado pelo telefone; um cliente existente não tem nome nem e-mail alterados por quem usa a rota pública.
+4. Para cada atribuição, na ordem do motor, escolhe-se a primeira vaga livre de cada recurso e insere-se `booking_resources`. Se a constraint recusar (outra requisição ganhou), tenta-se a próxima vaga e depois a próxima atribuição. Esgotadas, 409.
+
+Painel (perfis `owner` e `reception`): `GET /bookings` (filtros `date_from`, `date_to`, `resource_id`, `status`), `GET /bookings/{id}` e `POST /bookings/{id}/cancel`, que é idempotente.
+
+### Casos cobertos
+
+| Caso | Teste |
+|---|---|
+| Reserva pública sem login; o horário e o buffer saem da agenda | `test_public_booking_needs_no_login_and_returns_the_reserved_slot`, `test_a_booked_slot_and_its_buffer_leave_the_availability` |
+| Mesmo horário duas vezes e horários sobrepostos | `test_the_same_slot_cannot_be_booked_twice` |
+| Horário que a agenda nunca ofereceu | `test_a_time_the_availability_never_offered_is_refused`, `test_minimum_notice_applies_to_bookings` |
+| Cancelar libera o horário | `test_cancelling_frees_the_slot_again` |
+| Capacidade maior que 1 | `test_a_room_with_capacity_takes_that_many_simultaneous_bookings` |
+| Serviço que exige sala ocupa executor e sala | `test_a_service_that_needs_a_room_reserves_the_executor_and_the_room` |
+| Isolamento entre empresas e perfis | `test_bookings_are_isolated_between_companies`, `test_booking_endpoints_require_front_desk_roles` |
+| Concorrência: um vencedor por horário, no máximo a capacidade por sala, nenhuma sobreposição com inícios diferentes | `tests/concurrency/test_bookings.py` |
+| Capacidade no motor | `test_a_room_with_every_seat_taken_is_busy`, `test_a_seat_free_for_the_whole_interval_is_needed_not_just_free_at_each_instant` |

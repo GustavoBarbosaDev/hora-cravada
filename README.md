@@ -51,4 +51,4 @@ O comando recusa rodar com `ENVIRONMENT=production`.
 
 - `backend/`: FastAPI, SQLAlchemy 2 async, Alembic, worker ARQ
 - `frontend/`: Next.js (App Router)
-- `docs/`: arquitetura (tenants, catálogo, disponibilidade e motor de slots), decisões, backlog e relatórios por fase
+- `docs/`: arquitetura (tenants, catálogo, disponibilidade, motor de slots e reservas), decisões, backlog e relatórios por fase
