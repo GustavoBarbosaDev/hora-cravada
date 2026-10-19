@@ -1,6 +1,7 @@
 import datetime
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Literal, cast
 from zoneinfo import ZoneInfo
 
@@ -8,6 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.availability.models import AvailabilityException, AvailabilityRule
+from app.bookings.models import BookingResource
 from app.core.errors import NotFoundError, UnprocessableError
 from app.resources.models import Resource
 from app.services.models import ResourceService, Service
@@ -17,6 +19,7 @@ from app.slots.engine import (
     Policy,
     Schedule,
     ServiceTiming,
+    Slot,
     compute_slots,
 )
 from app.slots.schemas import SlotOut, SlotPolicySettings, SlotQuery, SlotsOut
@@ -28,17 +31,61 @@ async def load_busy(
     resource_ids: list[uuid.UUID],
     start: datetime.datetime,
     end: datetime.datetime,
-) -> dict[uuid.UUID, list[Interval]]:
-    """Intervalos já ocupados por recurso entre `start` e `end` (UTC).
+) -> dict[uuid.UUID, dict[int, list[Interval]]]:
+    """Intervalos ocupados por recurso e vaga entre `start` e `end` (UTC), com os buffers."""
+    busy: dict[uuid.UUID, dict[int, list[Interval]]] = defaultdict(lambda: defaultdict(list))
+    rows = await session.execute(
+        select(
+            BookingResource.resource_id,
+            BookingResource.seat,
+            BookingResource.busy_start,
+            BookingResource.busy_end,
+        ).where(
+            BookingResource.resource_id.in_(resource_ids),
+            BookingResource.active.is_(True),
+            BookingResource.busy_start < end,
+            BookingResource.busy_end > start,
+        )
+    )
+    for resource_id, seat, busy_start, busy_end in rows:
+        busy[resource_id][seat].append((busy_start, busy_end))
+    return busy
 
-    Ainda não há reservas (fase 4); quando existirem, esta é a única função a trocar.
-    """
-    return {}
+
+@dataclass(frozen=True)
+class SlotPlan:
+    """Resultado do motor com o contexto que as reservas também precisam."""
+
+    tenant: Tenant
+    branch: Branch
+    service: Service
+    slots: list[Slot]
+    resources: dict[uuid.UUID, Resource]
 
 
 async def find_slots(
     session: AsyncSession, tenant: Tenant, query: SlotQuery, now: datetime.datetime
 ) -> SlotsOut:
+    plan = await plan_slots(session, tenant, query, now)
+    return SlotsOut(
+        branch_id=plan.branch.id,
+        timezone=plan.branch.timezone,
+        service_id=plan.service.id,
+        duration_min=plan.service.duration_min,
+        slots=[
+            SlotOut(
+                start=slot.start,
+                end=slot.end,
+                resource_ids=[assignment[0] for assignment in slot.assignments],
+            )
+            for slot in plan.slots
+        ],
+    )
+
+
+async def plan_slots(
+    session: AsyncSession, tenant: Tenant, query: SlotQuery, now: datetime.datetime
+) -> SlotPlan:
     service = await session.get(Service, query.service_id)
     if service is None or not service.active:
         raise NotFoundError("Serviço não encontrado.")
@@ -76,19 +123,12 @@ async def find_slots(
         ),
         now=now,
     )
-    return SlotsOut(
-        branch_id=branch.id,
-        timezone=branch.timezone,
-        service_id=service.id,
-        duration_min=service.duration_min,
-        slots=[
-            SlotOut(
-                start=slot.start,
-                end=slot.end,
-                resource_ids=[assignment[0] for assignment in slot.assignments],
-            )
-            for slot in slots
-        ],
+    return SlotPlan(
+        tenant=tenant,
+        branch=branch,
+        service=service,
+        slots=slots,
+        resources={r.id: r for r in resources},
     )
 
 
@@ -193,12 +233,21 @@ async def _schedules(
             exceptions[resource_id][item.date].append(window)
 
     busy = await load_busy(session, ids, window_start, window_end)
+    capacity = {r.id: r.capacity for r in resources}
     return {
         resource_id: Schedule(
             resource_id=resource_id,
             weekly=weekly[resource_id],
             exceptions=exceptions[resource_id],
-            busy=busy.get(resource_id, []),
+            capacity=capacity[resource_id],
+            busy=busy[resource_id][1] if resource_id in busy else [],
+            busy_by_seat=[
+                intervals
+                for seat, intervals in busy[resource_id].items()
+                if seat <= capacity[resource_id]
+            ]
+            if resource_id in busy
+            else [],
         )
         for resource_id in ids
     }

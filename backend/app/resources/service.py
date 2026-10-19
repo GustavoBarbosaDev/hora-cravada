@@ -1,10 +1,12 @@
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.branches.service import get_branch
-from app.core.errors import NotFoundError, UnprocessableError
+from app.core.errors import ConflictError, NotFoundError, UnprocessableError
+from app.db.errors import FOREIGN_KEY_VIOLATION, sqlstate
 from app.resources.models import Resource
 from app.resources.schemas import ResourceIn, ResourcePatch
 from app.tenants.models import Branch
@@ -59,5 +61,11 @@ async def update_resource(
 
 
 async def delete_resource(session: AsyncSession, resource_id: uuid.UUID) -> None:
-    await session.delete(await get_resource(session, resource_id))
-    await session.flush()
+    resource = await get_resource(session, resource_id)
+    try:
+        await session.delete(resource)
+        await session.flush()
+    except IntegrityError as exc:
+        if sqlstate(exc) != FOREIGN_KEY_VIOLATION:
+            raise
+        raise ConflictError("O recurso tem reservas; desative-o em vez de apagar.") from exc
