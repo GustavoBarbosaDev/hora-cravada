@@ -1,0 +1,13 @@
+Olá, {{ customer_name }}.
+
+Sua reserva em {{ tenant_name }} foi cancelada e o horário voltou a ficar disponível.
+
+Serviço: {{ service_name }}
+Quando: {{ start | local_datetime(timezone) }}
+{% if resource_names %}Com: {{ resource_names | join(", ") }}
+{% endif %}Local: {{ branch_name }}{% if branch_address %}, {{ branch_address }}{% endif %}
+
+Valor: {{ price_cents | brl }}
+{% if notes %}Observações: {{ notes }}
+{% endif %}
+{{ tenant_name }}
