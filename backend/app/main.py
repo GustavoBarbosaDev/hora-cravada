@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.core.errors import DependencyUnavailableError, register_error_handlers
 from app.core.logging import configure_logging
 from app.db.session import build_engine, build_sessionmaker, get_session
+from app.notifications.router import router as notifications_router
 from app.resources.router import router as resources_router
 from app.services.router import router as services_router
 from app.slots.router import router as slots_router
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(slots_router)
     app.include_router(public_bookings_router)
     app.include_router(bookings_router)
+    app.include_router(notifications_router)
 
     @app.middleware("http")
     async def log_requests(

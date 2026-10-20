@@ -201,3 +201,34 @@ Contexto: o plano previa cache por (empresa, serviço, dia) invalidado a cada re
 Decisão: não implementar na fase 4. A criação de reserva sempre confere o banco, então um cache nunca causaria conflito, só custo de leitura; não há medição que o justifique, e os testes ainda não têm Redis. Quando houver, a opção mais simples é um contador de versão por empresa incrementado a cada reserva criada ou cancelada, e a chave do cache incluir a versão, com TTL curto por causa da antecedência mínima e das mudanças de agenda.
 Alternativa descartada: cache por dia, que quebra a união de janelas que atravessam a meia-noite.
 
+
+
+## Outbox com payload copiado e um evento por tipo e reserva
+
+Contexto: o e-mail precisa dizer o que aconteceu, mesmo que a reserva mude antes do envio, e o worker não deve depender de ler dados de várias tabelas.
+Decisão: o evento guarda uma cópia dos dados da reserva (empresa, cliente, serviço, filial, fuso, recursos, preço) gravada na mesma transação da reserva. Há no máximo um evento por (reserva, tipo), garantido por constraint: cancelar repetidas vezes não reenfileira. Cliente sem e-mail não gera evento.
+Alternativa descartada: guardar só o id da reserva e montar o e-mail no envio, que mostraria dados diferentes dos da época do evento.
+
+## Worker enxerga todos os eventos por uma política de RLS própria
+
+Contexto: o worker não tem tenant de requisição, mas `hora_app` não tem `BYPASSRLS` e `outbox_events` tem RLS.
+Decisão: segunda política em `outbox_events` que libera a linha quando `app.outbox_worker = 'on'`, ligada com `set_config(..., true)` só na transação do worker. As demais tabelas e as rotas do painel continuam sob o isolamento por tenant; um teste confere que sem a variável nada é visível.
+Alternativa descartada: um segundo role de banco com `BYPASSRLS`, que exigiria outra credencial e outra URL de conexão para um único uso.
+
+## Evento travado durante o envio
+
+Contexto: dois workers não podem enviar o mesmo evento, e uma queda não pode perdê-lo.
+Decisão: cada evento é tratado numa transação própria: `FOR UPDATE SKIP LOCKED`, envio SMTP, atualização do estado, commit. Se o processo cai, a transação é desfeita e o evento segue pendente. A entrega é ao menos uma vez: uma queda entre o envio e o commit pode repetir a mensagem, que sai com o mesmo `Message-ID` (id do evento), e um evento já `sent` nunca é reprocessado.
+Alternativa descartada: marcar como "em envio" com prazo de lease, que exige recuperar eventos presos e não evita a duplicata no mesmo ponto de falha. O custo aceito é manter uma conexão aberta durante o SMTP (timeout de 15 s) por worker.
+
+## Retentativas
+
+Contexto: SMTP falha por motivos passageiros.
+Decisão: espera de 30 s dobrando a cada falha, com teto de 1 hora, e 6 tentativas por padrão (`OUTBOX_MAX_ATTEMPTS`); esgotadas, o evento vira `failed` e aparece em `GET /outbox-events?status=failed` (perfil `owner`). O worker consulta a tabela a cada 10 s por uma tarefa periódica do ARQ.
+Alternativa descartada: enfileirar um job do ARQ por evento, que duplicaria no Redis o estado que já está no banco e se perderia com o Redis.
+
+## Evento de remarcação sem emissor ainda
+
+Contexto: o plano pede e-mail de remarcação, mas remarcar só existe na fase 8.
+Decisão: o tipo, o template e o envio já existem e têm teste; a fase 8 passa a enfileirá-lo na transação que cria a reserva nova e cancela a antiga.
+Alternativa descartada: adiar o template, que deixaria o worker sem como tratar o tipo quando a fase 8 chegar.

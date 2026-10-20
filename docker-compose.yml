@@ -26,6 +26,12 @@ services:
       timeout: 3s
       retries: 20
 
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   api:
     build: ./backend
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
@@ -36,6 +42,8 @@ services:
       JWT_SECRET: segredo-de-desenvolvimento-local
       TEST_DATABASE_URL: postgresql+asyncpg://hora:hora@db:5432/hora_cravada_test
       REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
     ports:
       - "8000:8000"
     volumes:
@@ -57,6 +65,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   frontend:
     build: ./frontend

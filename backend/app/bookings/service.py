@@ -11,6 +11,8 @@ from app.bookings.models import CANCELLED, CONFIRMED, Booking, BookingResource, 
 from app.bookings.schemas import BookingIn, BookingOut, CustomerOut, PublicBookingOut
 from app.core.errors import ConflictError, NotFoundError
 from app.db.errors import EXCLUSION_VIOLATION, sqlstate
+from app.notifications.events import enqueue_booking_event
+from app.notifications.models import BOOKING_CANCELLED, BOOKING_CONFIRMED
 from app.resources.models import Resource
 from app.slots.schemas import SlotQuery
 from app.slots.service import plan_slots
@@ -101,6 +103,7 @@ async def create_booking(
                     )
         except _NoSeat:
             continue
+        await enqueue_booking_event(session, BOOKING_CONFIRMED, booking.id)
         return PublicBookingOut(
             id=booking.id,
             service_id=booking.service_id,
@@ -248,6 +251,7 @@ async def cancel_booking(
             .values(active=False)
         )
         await session.flush()
+        await enqueue_booking_event(session, BOOKING_CANCELLED, booking.id)
     return await get_booking(session, booking_id)
 
 

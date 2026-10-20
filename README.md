@@ -23,6 +23,7 @@ Serviços:
 | Frontend | http://localhost:3000 |
 | PostgreSQL | localhost:5432 (banco `hora_cravada`; `hora` é o dono e roda as migrations, `hora_app` é o role da API) |
 | Redis | localhost:6379 |
+| Mailpit | http://localhost:8025 (e-mails de desenvolvimento; SMTP na porta 1025) |
 
 As migrations rodam sozinhas quando a API sobe. Para rodar manualmente: `make migrate`.
 

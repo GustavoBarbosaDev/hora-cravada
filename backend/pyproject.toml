@@ -21,6 +21,8 @@ dependencies = [
     "pyjwt>=2.9",
     "email-validator>=2.2",
     "tzdata>=2024.1",
+    "jinja2>=3.1",
+    "aiosmtplib>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +38,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+"app.notifications" = ["templates/*"]
 
 [tool.ruff]
 line-length = 100

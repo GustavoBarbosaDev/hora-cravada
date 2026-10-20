@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     jwt_secret: str = DEV_JWT_SECRET
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    # STARTTLS para provedores reais (porta 587); o Mailpit de desenvolvimento não usa TLS.
+    smtp_starttls: bool = False
+    smtp_from: str = "agenda@horacravada.local"
+    outbox_max_attempts: int = 6
+    outbox_batch_size: int = 20
 
     @model_validator(mode="after")
     def reject_weak_secret_in_production(self) -> Self:
