@@ -201,3 +201,35 @@ Painel (perfis `owner` e `reception`): `GET /bookings` (filtros `date_from`, `da
 | Isolamento entre empresas e perfis | `test_bookings_are_isolated_between_companies`, `test_booking_endpoints_require_front_desk_roles` |
 | Concorrência: um vencedor por horário, no máximo a capacidade por sala, nenhuma sobreposição com inícios diferentes | `tests/concurrency/test_bookings.py` |
 | Capacidade no motor | `test_a_room_with_every_seat_taken_is_busy`, `test_a_seat_free_for_the_whole_interval_is_needed_not_just_free_at_each_instant` |
+
+## Notificações (outbox)
+
+`outbox_events` guarda o aviso a enviar. É gravado na mesma transação da reserva ou do cancelamento, então não existe reserva confirmada sem aviso pendente nem aviso de reserva que não aconteceu. O envio é feito à parte, por um worker ARQ.
+
+| Campo | Conteúdo |
+|---|---|
+| `kind` | `booking_confirmed`, `booking_cancelled` ou `booking_rescheduled` |
+| `payload` | cópia dos dados da reserva no momento do evento |
+| `status` | `pending`, `sent` ou `failed` |
+| `attempts`, `next_attempt_at`, `last_error` | controle das retentativas |
+
+Único por (`booking_id`, `kind`).
+
+Fluxo do worker (tarefa `deliver_outbox`, a cada 10 segundos): para cada evento vencido, uma transação com `set_config('app.outbox_worker', 'on')`, `SELECT ... FOR UPDATE SKIP LOCKED`, renderização do template Jinja2 (pt-BR, texto e HTML, data no fuso da filial), envio SMTP e atualização do estado. Falha soma uma tentativa e agenda a próxima com espera dobrando (30 s a 1 h); na sexta, o evento vira `failed`. Queda do processo desfaz a transação e o evento continua pendente.
+
+SMTP por `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS` e `SMTP_FROM`. Em desenvolvimento, o Mailpit do compose recebe tudo (interface em http://localhost:8025).
+
+`GET /outbox-events?status=` (perfil `owner`) lista os eventos da empresa.
+
+### Casos cobertos
+
+| Caso | Teste |
+|---|---|
+| Reserva e evento gravados juntos; recusa não deixa evento | `test_booking_and_its_confirmation_event_are_stored_together`, `test_a_refused_booking_leaves_no_event` |
+| Sem e-mail, sem evento | `test_customer_without_email_gets_no_event` |
+| Cancelar repetido enfileira um aviso | `test_cancelling_queues_one_cancellation_even_when_repeated` |
+| Envio e conteúdo do e-mail | `test_worker_sends_the_email_and_marks_the_event_as_sent`, `tests/unit/test_email_rendering.py` |
+| Falha mantém o evento; espera cresce; esgotado vira `failed` | `test_failed_delivery_keeps_the_event_for_a_later_attempt`, `test_backoff_grows_with_each_failed_attempt`, `test_event_that_runs_out_of_attempts_becomes_failed_and_visible` |
+| Queda do worker e retomada | `test_worker_crash_after_the_booking_does_not_lose_the_email` |
+| Sem reenvio; dois workers | `test_a_sent_event_is_not_sent_again`, `test_two_workers_never_send_the_same_event_twice` |
+| Isolamento e perfis | `test_events_are_isolated_between_companies`, `test_only_the_owner_can_list_events`, `test_tenant_requests_cannot_see_events_without_the_worker_flag` |

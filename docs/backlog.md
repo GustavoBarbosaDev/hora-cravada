@@ -2,7 +2,6 @@
 
 Itens fora do escopo da fase em que apareceram.
 
-- Mailpit no compose entra com as notificações (fase 5).
 - Limite de tentativas de login por IP e por e-mail (fase 14, endurecimento).
 - Edição e desativação de usuários, troca de senha e recuperação de senha (fase 10).
 - Limpeza periódica de refresh tokens expirados (fase 14).
@@ -21,7 +20,10 @@ Itens fora do escopo da fase em que apareceram.
 - Não há rota pública para listar serviços, recursos e filiais da empresa; entra com a página de agendamento (fase 7).
 - Reserva pública sem cancelamento pelo cliente: não há token nem link para ele cancelar ou remarcar (fase 8). A resposta de criação ainda não devolve segredo algum.
 - A rota pública de criação não tem limite de taxa nem proteção contra abuso (reservas falsas); entra com o endurecimento (fase 14).
-- Cliente identificado só pelo telefone, sem verificação: quem digita um número alheio cria reservas no nome dele. Confirmação por código ou link entra com as notificações (fase 5).
+- Cliente identificado só pelo telefone, sem verificação: quem digita um número alheio cria reservas no nome dele. O e-mail de confirmação não prova a posse do telefone; a verificação fica para o link por token (fase 8).
 - Reservas feitas pelo painel (recepção marcando para o cliente, encaixes) ainda não existem; só a rota pública cria.
 - `GET /bookings` não pagina. Limitar por período obrigatório quando houver volume (fase 7 ou 10).
 - Vagas de recursos com capacidade alta (centenas) são tentadas no máximo 5 por reserva em caso de corrida; em disputa extrema o cliente recebe 409 mesmo havendo vaga.
+- Reenfileirar manualmente um evento `failed` pelo painel; hoje só se lê o estado (fase 10).
+- Limpeza periódica de eventos `sent` antigos do outbox (fase 14).
+- Lembretes e avisos de lista de espera usarão o mesmo outbox (fases 9 e 13); o tipo de evento é fechado por `CHECK` e cada fase o amplia numa migration.
